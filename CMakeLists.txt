@@ -32,6 +32,7 @@ add_library(score_addon_my_vfx
 # Link
 target_link_libraries(score_addon_my_vfx PUBLIC
   score_plugin_gfx
+  score_plugin_engine
 )
 
 # Target-specific options

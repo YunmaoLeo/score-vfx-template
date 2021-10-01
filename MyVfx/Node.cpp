@@ -440,14 +440,13 @@ private:
   }
 
   // Everything is set up, we can render our mesh
-  QRhiResourceUpdateBatch* runRenderPass(
+  void runRenderPass(
       score::gfx::RenderList& renderer,
       QRhiCommandBuffer& cb,
       score::gfx::Edge& edge) override
   {
     const auto& mesh = TexturedCube::instance();
     defaultRenderPass(renderer, mesh, cb, edge);
-    return nullptr;
   }
 
   // Free resources allocated in this class
