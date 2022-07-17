@@ -225,12 +225,6 @@ Node::Node()
   // Load ubo address in m_materialData
   m_materialData.reset((char*)&ubo);
 
-  // Generate the shaders
-  std::tie(m_vertexS, m_fragmentS)
-      = score::gfx::makeShaders(vertex_shader, fragment_shader);
-  SCORE_ASSERT(m_vertexS.isValid());
-  SCORE_ASSERT(m_fragmentS.isValid());
-
   // Create an output port to indicate that this node
   // draws something
   output.push_back(
@@ -370,8 +364,11 @@ private:
       sampler->create();
       m_samplers.push_back({sampler, m_texture});
     }
-    SCORE_ASSERT(n.m_vertexS.isValid());
-    SCORE_ASSERT(n.m_fragmentS.isValid());
+    // Generate the shaders
+    std::tie(m_vertexS, m_fragmentS)
+        = score::gfx::makeShaders(renderer.state, vertex_shader, fragment_shader);
+    SCORE_ASSERT(m_vertexS.isValid());
+    SCORE_ASSERT(m_fragmentS.isValid());
 
     // Create the rendering pipelines for each output of this node.
     for (score::gfx::Edge* edge : this->node.output[0]->edges)
@@ -382,7 +379,7 @@ private:
         auto bindings = createDefaultBindings(
             renderer, rt, m_processUBO, m_material.buffer, m_samplers);
         auto pipeline = buildPipeline(
-            renderer, mesh, n.m_vertexS, n.m_fragmentS, rt, bindings);
+            renderer, mesh, m_vertexS, m_fragmentS, rt, bindings);
         m_p.emplace_back(edge, pipeline);
       }
     }
