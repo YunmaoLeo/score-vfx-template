@@ -9,7 +9,7 @@ namespace MyVfx
 /** Here we define a mesh fairly manually and in a fairly suboptimal way
  * (based on this: https://pastebin.com/DXKEmvap)
  */
-struct TexturedCube final : score::gfx::Mesh
+struct TexturedCube final : score::gfx::BasicMesh
 {
   static std::vector<float> generateCubeMesh() noexcept
   {
@@ -87,6 +87,11 @@ struct TexturedCube final : score::gfx::Mesh
     return meshBuf;
   }
 
+  [[nodiscard]] Flags flags() const noexcept override
+  {
+    return HasPosition | HasTexCoord | HasNormals;
+  }
+
   // Generate our mesh data
   const std::vector<float> mesh = generateCubeMesh();
 
@@ -103,38 +108,41 @@ struct TexturedCube final : score::gfx::Mesh
     // * vertex 1's data in this attribute will start at 3 * sizeof(float)
     // * vertex 2's data in this attribute will start at 6 * sizeof(float)
     // (basically that every vertex position is one after each other).
-    vertexInputBindings.push_back({3 * sizeof(float)});
-    vertexAttributeBindings.push_back(
-        {0, 0, QRhiVertexInputAttribute::Float3, 0});
+    vertexBindings.push_back({3 * sizeof(float)});
+    vertexAttributes.push_back({0, 0, QRhiVertexInputAttribute::Float3, 0});
 
     // Texcoord
     // Each `in vec2 texcoord;` in the fragment shader will be an [ u v ] element
-    vertexInputBindings.push_back({2 * sizeof(float)});
-    vertexAttributeBindings.push_back(
-        {1, 1, QRhiVertexInputAttribute::Float2, 0});
+    vertexBindings.push_back({2 * sizeof(float)});
+    vertexAttributes.push_back({1, 1, QRhiVertexInputAttribute::Float2, 0});
 
     // These variables are used by score to upload the texture
     // and send the draw call automatically
     vertexArray = mesh;
     vertexCount = 36;
 
+    // Define the topology of our mesh
+    topology = pip::Topology::Triangles;
+    cullMode = pip::CullMode::Back;
+    frontFace = pip::FrontFace::CW;
+
     // Note: if we had an interleaved mesh, where the data is stored like
     // [ { x y z u v } { x y z u v } { x y z u v } ] ...
     // Then we'd have a single binding of stride 5 * sizeof(float)
     // (3 floats for the position and 2 floats for the texture coordinates):
 
-    // vertexInputBindings.push_back({5 * sizeof(float)});
+    // vertexBindings.push_back({5 * sizeof(float)});
 
     // And two attributes mapped to that binding
     // The first attribute (position) starts at byte 0 in each element:
     //
-    //     vertexAttributeBindings.push_back(
+    //     vertexAttributes.push_back(
     //         {0, 0, QRhiVertexInputAttribute::Float3, 0});
     //
     // The second attribute (texcoord) starts at byte 3 * sizeof(float)
     // (just after the position):
     //
-    //     vertexAttributeBindings.push_back(
+    //     vertexAttributes.push_back(
     //         {0, 1, QRhiVertexInputAttribute::Float2, 3 * sizeof(float)});
   }
 
@@ -152,13 +160,13 @@ struct TexturedCube final : score::gfx::Mesh
   // it tells the pipeline which buffers are going to be bound
   // to each attribute defined above
   void setupBindings(
-      QRhiBuffer& vtxData,
-      QRhiBuffer* idxData,
+      const score::gfx::MeshBuffers& bufs,
       QRhiCommandBuffer& cb) const noexcept override
   {
     const QRhiCommandBuffer::VertexInput bindings[] = {
-        {&vtxData, 0},                      // vertex starts at offset zero
-        {&vtxData, 36 * 3 * sizeof(float)}, // texcoord starts after all the vertices
+        {bufs.mesh, 0}, // vertex starts at offset zero
+        {bufs.mesh,
+         36 * 3 * sizeof(float)}, // texcoord starts after all the vertices
     };
 
     cb.setVertexInput(0, 2, bindings);
@@ -278,27 +286,13 @@ private:
 
     ps->setSampleCount(1);
 
-    ps->setDepthTest(false);
-    ps->setDepthWrite(false);
-
-    // Matches the vertex data
-    ps->setTopology(QRhiGraphicsPipeline::Triangles);
-    ps->setCullMode(QRhiGraphicsPipeline::CullMode::Front);
-    ps->setFrontFace(QRhiGraphicsPipeline::FrontFace::CCW);
-
     // Set the shaders used
     ps->setShaderStages(
         {{QRhiShaderStage::Vertex, vertexS},
          {QRhiShaderStage::Fragment, fragmentS}});
 
     // Set the mesh specification
-    QRhiVertexInputLayout inputLayout;
-    inputLayout.setBindings(
-        mesh.vertexInputBindings.begin(), mesh.vertexInputBindings.end());
-    inputLayout.setAttributes(
-        mesh.vertexAttributeBindings.begin(),
-        mesh.vertexAttributeBindings.end());
-    ps->setVertexInputLayout(inputLayout);
+    mesh.preparePipeline(*ps);
 
     // Set the shader resources (input UBOs, samplers & textures...)
     ps->setShaderResourceBindings(srb);
@@ -311,15 +305,14 @@ private:
     return {ps, srb};
   }
 
-  void init(score::gfx::RenderList& renderer) override
+  void
+  init(score::gfx::RenderList& renderer, QRhiResourceUpdateBatch& res) override
   {
     const auto& mesh = TexturedCube::instance();
 
     // Load the mesh data into the GPU
     {
-      auto [mbuffer, ibuffer] = renderer.initMeshBuffer(mesh);
-      m_meshBuffer = mbuffer;
-      m_idxBuffer = ibuffer;
+      m_meshbufs = renderer.initMeshBuffer(mesh, res);
     }
 
     // Initialize the Process UBO (provides timing information, etc.)
@@ -365,8 +358,8 @@ private:
       m_samplers.push_back({sampler, m_texture});
     }
     // Generate the shaders
-    std::tie(m_vertexS, m_fragmentS)
-        = score::gfx::makeShaders(renderer.state, vertex_shader, fragment_shader);
+    std::tie(m_vertexS, m_fragmentS) = score::gfx::makeShaders(
+        renderer.state, vertex_shader, fragment_shader);
     SCORE_ASSERT(m_vertexS.isValid());
     SCORE_ASSERT(m_fragmentS.isValid());
 
@@ -426,7 +419,10 @@ private:
 
     // Update the process UBO (indicates timing)
     res.updateDynamicBuffer(
-        m_processUBO, 0, sizeof(score::gfx::ProcessUBO), &this->node.standardUBO);
+        m_processUBO,
+        0,
+        sizeof(score::gfx::ProcessUBO),
+        &this->node.standardUBO);
 
     // If images haven't been uploaded yet, upload them.
     if (!m_uploaded)
