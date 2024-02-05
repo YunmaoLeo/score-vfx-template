@@ -12,7 +12,7 @@ score_addon_my_vfx::score_addon_my_vfx() { }
 
 score_addon_my_vfx::~score_addon_my_vfx() { }
 
-std::vector<std::unique_ptr<score::InterfaceBase>>
+std::vector<score::InterfaceBase*>
 score_addon_my_vfx::factories(
     const score::ApplicationContext& ctx,
     const score::InterfaceKey& key) const
