@@ -247,7 +247,6 @@ Node::~Node()
 }
 
 // This header is used because some function names change between Qt 5 and Qt 6
-#include <Gfx/Qt5CompatPush> // clang-format: keep
 class Renderer : public score::gfx::GenericNodeRenderer
 {
 public:
@@ -455,7 +454,6 @@ private:
   QRhiTexture* m_texture{};
   bool m_uploaded = false;
 };
-#include <Gfx/Qt5CompatPop> // clang-format: keep
 
 score::gfx::NodeRenderer*
 Node::createRenderer(score::gfx::RenderList& r) const noexcept
