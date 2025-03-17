@@ -378,7 +378,7 @@ private:
   }
 
   int m_rotationCount = 0;
-  void update(score::gfx::RenderList& renderer, QRhiResourceUpdateBatch& res)
+  void update(score::gfx::RenderList& renderer, QRhiResourceUpdateBatch& res, score::gfx::Edge* edge)
       override
   {
     auto& n = static_cast<const Node&>(this->node);
@@ -421,7 +421,7 @@ private:
         m_processUBO,
         0,
         sizeof(score::gfx::ProcessUBO),
-        &this->node.standardUBO);
+        &n.standardUBO);
 
     // If images haven't been uploaded yet, upload them.
     if (!m_uploaded)
