@@ -3,9 +3,9 @@
 #include <Effect/EffectFactory.hpp>
 #include <Process/GenericProcessFactory.hpp>
 
-#include <MyVfx/Process.hpp>
+#include <QVKRT/Process.hpp>
 
-namespace MyVfx
+namespace QVKRT
 {
-using LayerFactory = Process::GenericDefaultLayerFactory<MyVfx::Model>;
+using LayerFactory = Process::GenericDefaultLayerFactory<QVKRT::Model>;
 }

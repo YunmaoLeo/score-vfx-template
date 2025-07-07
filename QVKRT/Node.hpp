@@ -3,7 +3,7 @@
 #include <Gfx/Graph/RenderList.hpp>
 #include <Gfx/Graph/CommonUBOs.hpp>
 
-namespace MyVfx
+namespace QVKRT
 {
 class Renderer;
 class Node : public score::gfx::NodeModel
@@ -15,10 +15,12 @@ public:
   score::gfx::NodeRenderer*
   createRenderer(score::gfx::RenderList& r) const noexcept override;
 
+
 private:
   score::gfx::ModelCameraUBO ubo;
 
   friend Renderer;
   QImage m_image;
+  QRhi* m_Rhi = nullptr;
 };
 }

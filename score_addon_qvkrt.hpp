@@ -12,15 +12,15 @@
 #include <utility>
 #include <vector>
 
-class score_addon_my_vfx final
+class score_addon_qvkrt final
     : public score::Plugin_QtInterface
     , public score::FactoryInterface_QtInterface
 {
-  SCORE_PLUGIN_METADATA(1, "00000000-0000-0000-0000-000000000000")
+  SCORE_PLUGIN_METADATA(1, "31cb4cac-694a-4de4-b27e-46f1c5394f4c")
 
 public:
-  score_addon_my_vfx();
-  ~score_addon_my_vfx() override;
+  score_addon_qvkrt();
+  ~score_addon_qvkrt() override;
 
 private:
   std::vector<score::InterfaceBase*> factories(
