@@ -1,16 +1,16 @@
 #pragma once
 #include <Process/ProcessMetadata.hpp>
 
-namespace MyVfx
+namespace QVKRT
 {
 class Model;
 }
 
 PROCESS_METADATA(,
-                 MyVfx::Model,
-                 "00000000-0000-0000-0000-000000000000",
-                 "MyVfx",                           // Internal name
-                 "MyVfx",                           // Pretty name
+                 QVKRT::Model,
+                 "785ab719-fb92-448f-8771-19762daeb570",
+                 "QVKRT",                           // Internal name
+                 "QVKRT",                           // Pretty name
                  Process::ProcessCategory::Visual,  // Category
                  "GFX",                             // Category
                  "My VFX",                          // Description

@@ -11,9 +11,9 @@
 
 #include <ossia/dataflow/port.hpp>
 
-#include <MyVfx/Node.hpp>
-#include <MyVfx/Process.hpp>
-namespace MyVfx
+#include <QVKRT/Node.hpp>
+#include <QVKRT/Process.hpp>
+namespace QVKRT
 {
 class mesh_node final : public Gfx::gfx_exec_node
 {
@@ -23,21 +23,21 @@ public:
   {
     root_outputs().push_back(new ossia::texture_outlet);
 
-    auto n = std::make_unique<MyVfx::Node>();
+    auto n = std::make_unique<QVKRT::Node>();
 
     id = exec_context->ui->register_node(std::move(n));
   }
 
   ~mesh_node() { exec_context->ui->unregister_node(id); }
 
-  std::string label() const noexcept override { return "MyVfx"; }
+  std::string label() const noexcept override { return "QVKRT"; }
 };
 
 ProcessExecutorComponent::ProcessExecutorComponent(
-    MyVfx::Model& element,
+    QVKRT::Model& element,
     const Execution::Context& ctx,
     QObject* parent)
-    : ProcessComponent_T{element, ctx, "MyVfxExecutorComponent", parent}
+    : ProcessComponent_T{element, ctx, "QVKRTExecutorComponent", parent}
 {
   try
   {

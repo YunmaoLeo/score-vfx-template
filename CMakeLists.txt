@@ -4,37 +4,43 @@ if(NOT TARGET score_lib_base)
   include("${SCORE_SOURCE_DIR}/cmake/ScoreExternalAddon.cmake")
 endif()
 
+find_package(Vulkan REQUIRED)
+
 if(NOT TARGET score_plugin_gfx)
   message("Requires gfx plug-in")
   return()
 endif()
 
-project(score_addon_my_vfx LANGUAGES CXX)
+project(score_addon_qvkrt LANGUAGES CXX)
 
 # General initialization
 score_common_setup()
 
 # Creation of the library
-add_library(score_addon_my_vfx
-  MyVfx/Executor.hpp
-  MyVfx/Metadata.hpp
-  MyVfx/Process.hpp
-  MyVfx/Layer.hpp
-  MyVfx/Executor.cpp
-  MyVfx/Process.cpp
-  MyVfx/Node.hpp
-  MyVfx/Node.cpp
+add_library(score_addon_qvkrt
+  QVKRT/Executor.hpp
+  QVKRT/Metadata.hpp
+  QVKRT/Process.hpp
+  QVKRT/Layer.hpp
+  QVKRT/Executor.cpp
+  QVKRT/Process.cpp
+  QVKRT/Node.hpp
+  QVKRT/Node.cpp
 
-  score_addon_my_vfx.hpp
-  score_addon_my_vfx.cpp
+  QVKRT/rt/rt.hpp
+  QVKRT/rt/rt.cpp
+
+  score_addon_qvkrt.hpp
+  score_addon_qvkrt.cpp
 )
 
 # Link
-target_link_libraries(score_addon_my_vfx PUBLIC
+target_link_libraries(score_addon_qvkrt PUBLIC
   score_plugin_gfx
   score_plugin_engine
+  Vulkan::Vulkan
 )
 
 # Target-specific options
-setup_score_plugin(score_addon_my_vfx)
+setup_score_plugin(score_addon_qvkrt)
 

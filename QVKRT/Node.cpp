@@ -1,10 +1,13 @@
 #include "Node.hpp"
+#include <private/qrhivulkan_p.h>
+#include "rt/rt.hpp"
+#include "score/gfx/Vulkan.hpp"
 
 #include <Gfx/Graph/NodeRenderer.hpp>
 
 #include <score/tools/Debug.hpp>
 
-namespace MyVfx
+namespace QVKRT
 {
 /** Here we define a mesh fairly manually and in a fairly suboptimal way
  * (based on this: https://pastebin.com/DXKEmvap)
@@ -201,6 +204,7 @@ out gl_PerVertex { vec4 gl_Position; };
 void main()
 {
   v_texcoord = vec2(texcoord.x, texcoordAdjust.y + texcoordAdjust.x * texcoord.y);
+  v_texcoord = texcoord;
   gl_Position = clipSpaceCorrMatrix * matrixModelViewProjection * vec4(position, 1.0);
 }
 )_";
@@ -220,8 +224,6 @@ layout(location = 0) out vec4 fragColor;
 void main ()
 {
   fragColor = texture(y_tex, v_texcoord.xy);
-  if(fragColor.a == 0.)
-    fragColor = vec4(v_texcoord.xy, 0., 1.);
 }
 )_";
 
@@ -255,6 +257,27 @@ public:
 private:
   ~Renderer() { }
 
+  QSize m_pixelSize;
+  QRhi* m_rhi = nullptr;
+  QRhiTexture* m_rhiTex = nullptr;
+  QRhiRenderPassDescriptor *m_rpDesc = nullptr;
+  QRhiTextureRenderTarget *m_rhiRt = nullptr;
+
+  QVulkanInstance *m_inst = nullptr;
+  VkPhysicalDevice m_physDev = VK_NULL_HANDLE;
+  VkDevice m_dev = VK_NULL_HANDLE;
+  QVulkanDeviceFunctions *m_devFuncs = nullptr;
+  QVulkanFunctions *m_funcs = nullptr;
+
+  VkImage m_output = VK_NULL_HANDLE;
+  VkImageLayout m_outputLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  VkDeviceMemory m_outputMemory = VK_NULL_HANDLE;
+  VkImageView m_outputView = VK_NULL_HANDLE;
+
+  RayTracer raytracing;
+
+  int frameSlotCount;
+
   // This function is only useful to reimplement if the node has an
   // input port (e.g. if it's an effect / filter / ...)
   score::gfx::TextureRenderTarget
@@ -273,6 +296,7 @@ private:
       const score::gfx::TextureRenderTarget& rt,
       QRhiShaderResourceBindings* srb)
   {
+
     auto& rhi = *renderer.state.rhi;
     auto ps = rhi.newGraphicsPipeline();
     ps->setName("Node::ps");
@@ -304,9 +328,116 @@ private:
     return {ps, srb};
   }
 
-  void
-  init(score::gfx::RenderList& renderer, QRhiResourceUpdateBatch& res) override
+  void createNativeTexture()
   {
+    qDebug() << "new texture of size" << m_pixelSize;
+
+    m_outputLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    VkImageCreateInfo imageInfo = {};
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.flags = 0;
+    imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+    imageInfo.extent.width = uint32_t(m_pixelSize.width());
+    imageInfo.extent.height = uint32_t(m_pixelSize.height());
+    imageInfo.extent.depth = 1;
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.initialLayout = m_outputLayout;
+    imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
+
+    m_devFuncs->vkCreateImage(m_dev, &imageInfo, nullptr, &m_output);
+
+    VkMemoryRequirements memReq;
+    m_devFuncs->vkGetImageMemoryRequirements(m_dev, m_output, &memReq);
+    quint32 memIndex = 0;
+    VkPhysicalDeviceMemoryProperties physDevMemProps;
+    m_funcs->vkGetPhysicalDeviceMemoryProperties(m_physDev, &physDevMemProps);
+    for (uint32_t i = 0; i < physDevMemProps.memoryTypeCount; ++i) {
+      if (!(memReq.memoryTypeBits & (1 << i)))
+        continue;
+      if (physDevMemProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
+        memIndex = i;
+        break;
+      }
+    }
+
+    VkMemoryAllocateInfo allocInfo = {
+      VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      nullptr,
+      memReq.size,
+      memIndex
+  };
+
+    m_devFuncs->vkAllocateMemory(m_dev, &allocInfo, nullptr, &m_outputMemory);
+    m_devFuncs->vkBindImageMemory(m_dev, m_output, m_outputMemory, 0);
+
+    VkImageViewCreateInfo viewInfo = {};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = m_output;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+    viewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
+    viewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
+    viewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
+    viewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.baseMipLevel = 0;
+    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount = 1;
+    m_devFuncs->vkCreateImageView(m_dev, &viewInfo, nullptr, &m_outputView);
+
+    m_rhiTex = m_rhi->newTexture(QRhiTexture::RGBA8, m_pixelSize, 1,
+                               QRhiTexture::RenderTarget           // 之后要当作 RT
+                             | QRhiTexture::UsedWithLoadStore);   // ray-tracing 要写
+
+    QRhiTexture::NativeTexture nt;
+    nt.object = quint64(m_output);
+    nt.layout = int(m_outputLayout);
+
+    bool ok = m_rhiTex->createFrom(nt);
+    Q_ASSERT(ok);
+  }
+
+  void init(score::gfx::RenderList& renderer, QRhiResourceUpdateBatch& res) override
+  {
+    // Start initialize raytracing
+    // get rhi
+    m_rhi = renderer.state.rhi;
+    Q_ASSERT(m_rhi && m_rhi->backend()== QRhi::Vulkan);
+
+    frameSlotCount = m_rhi->resourceLimit(QRhi::FramesInFlight);
+    qDebug() << "FrameSlotCount" << frameSlotCount;
+
+    m_inst = score::gfx::staticVulkanInstance();
+    Q_ASSERT(m_inst && m_inst->isValid());
+
+    const QRhiVulkanNativeHandles* handles = static_cast<const QRhiVulkanNativeHandles*>(m_rhi->nativeHandles());
+    Q_ASSERT(handles);
+
+    m_physDev = handles->physDev;
+    m_dev = handles->dev;
+    Q_ASSERT(m_physDev && m_dev);
+
+    m_devFuncs = m_inst->deviceFunctions(m_dev);
+    m_funcs = m_inst->functions();
+    Q_ASSERT(m_devFuncs && m_funcs);
+
+    raytracing.init(m_physDev, m_dev, m_funcs, m_devFuncs);
+
+    m_pixelSize = renderer.state.renderSize;
+
+    qDebug() << "Pixel Size" << m_pixelSize;
+
+
+    // initialize texture for ray tracing rendering
+    createNativeTexture();
+
+    //original cube render pipeline
     const auto& mesh = TexturedCube::instance();
 
     // Load the mesh data into the GPU
@@ -354,7 +485,8 @@ private:
 
       sampler->setName("Node::sampler");
       sampler->create();
-      m_samplers.push_back({sampler, m_texture});
+      // m_samplers.push_back({sampler, m_texture});
+      m_samplers.push_back({sampler, m_rhiTex});
     }
     // Generate the shaders
     std::tie(m_vertexS, m_fragmentS) = score::gfx::makeShaders(
@@ -362,6 +494,7 @@ private:
     SCORE_ASSERT(m_vertexS.isValid());
     SCORE_ASSERT(m_fragmentS.isValid());
 
+    // defaultPassesInit(renderer,mesh);
     // Create the rendering pipelines for each output of this node.
     for (score::gfx::Edge* edge : this->node.output[0]->edges)
     {
@@ -375,6 +508,7 @@ private:
         m_p.emplace_back(edge, pipeline);
       }
     }
+
   }
 
   int m_rotationCount = 0;
@@ -391,7 +525,7 @@ private:
 
       // Our object rotates in a very crude way
       QMatrix4x4 model;
-      model.scale(0.25);
+      model.scale(0.5);
       model.rotate(m_rotationCount++, QVector3D(1, 1, 1));
 
       // The camera and viewports are fixed
@@ -437,6 +571,22 @@ private:
       QRhiCommandBuffer& cb,
       score::gfx::Edge& edge) override
   {
+    uint currentFrameSlot = renderer.frame % frameSlotCount;
+
+    auto *cbHandles = static_cast<const QRhiVulkanCommandBufferNativeHandles *>(cb.nativeHandles());
+
+    VkCommandBuffer vkCmdBuf = cbHandles->commandBuffer;
+    m_outputLayout = raytracing.doIt(m_inst, m_physDev, m_dev, m_devFuncs, m_funcs,
+                                 vkCmdBuf, m_output, m_outputLayout, m_outputView,
+                                 currentFrameSlot, m_pixelSize);
+
+    m_rhiTex->setNativeLayout(int(m_outputLayout));   // 告诉 QRhi 新布局
+
+    m_rhiTex->setNativeLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    m_outputLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    m_samplers[0].texture = m_rhiTex;
+
     const auto& mesh = TexturedCube::instance();
     defaultRenderPass(renderer, mesh, cb, edge);
   }
@@ -446,6 +596,9 @@ private:
   {
     m_texture->deleteLater();
     m_texture = nullptr;
+
+    m_rhiTex->deleteLater();
+    m_rhiTex = nullptr;
 
     // This will free all the other resources - material & process UBO, etc
     defaultRelease(r);

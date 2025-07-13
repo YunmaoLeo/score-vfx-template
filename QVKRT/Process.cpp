@@ -7,8 +7,8 @@
 #include <Process/Dataflow/WidgetInlets.hpp>
 
 #include <wobjectimpl.h>
-W_OBJECT_IMPL(MyVfx::Model)
-namespace MyVfx
+W_OBJECT_IMPL(QVKRT::Model)
+namespace QVKRT
 {
 Model::Model(
     const TimeVal& duration,
@@ -29,7 +29,7 @@ QString Model::prettyName() const noexcept
 
 }
 template <>
-void DataStreamReader::read(const MyVfx::Model& proc)
+void DataStreamReader::read(const QVKRT::Model& proc)
 {
   readPorts(*this, proc.m_inlets, proc.m_outlets);
 
@@ -37,7 +37,7 @@ void DataStreamReader::read(const MyVfx::Model& proc)
 }
 
 template <>
-void DataStreamWriter::write(MyVfx::Model& proc)
+void DataStreamWriter::write(QVKRT::Model& proc)
 {
   writePorts(
       *this,
@@ -49,13 +49,13 @@ void DataStreamWriter::write(MyVfx::Model& proc)
 }
 
 template <>
-void JSONReader::read(const MyVfx::Model& proc)
+void JSONReader::read(const QVKRT::Model& proc)
 {
   readPorts(*this, proc.m_inlets, proc.m_outlets);
 }
 
 template <>
-void JSONWriter::write(MyVfx::Model& proc)
+void JSONWriter::write(QVKRT::Model& proc)
 {
   writePorts(
       *this,
